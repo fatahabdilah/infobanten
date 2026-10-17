@@ -1,0 +1,126 @@
+// Skema data mengikuti struktur WordPress (posts, terms, media, users, comments, options)
+// supaya ID dan slug hasil migrasi tetap sama.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Supabase Postgres:
+//   DATABASE_URL = koneksi pooler (port 6543, ?pgbouncer=true) — dipakai aplikasi
+//   DIRECT_URL   = koneksi langsung (port 5432) — dipakai prisma db push / migrasi
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  login        String    @unique
+  email        String    @unique
+  displayName  String
+  nicename     String    @unique // slug untuk /author/{nicename}/
+  passwordHash String
+  role         String    @default("author") // administrator | editor | author | contributor | subscriber
+  bio          String    @default("")
+  createdAt    DateTime  @default(now())
+  posts        Post[]
+  media        Media[]
+}
+
+model Post {
+  id            Int        @id @default(autoincrement())
+  type          String     @default("post") // post | page
+  status        String     @default("draft") // publish | draft | pending | private | trash
+  slug          String
+  title         String     @default("")
+  content       String     @default("")
+  excerpt       String     @default("")
+  seoTitle      String     @default("")
+  seoDescription String    @default("")
+  template      String     @default("")
+  sticky        Boolean    @default(false)
+  commentStatus String     @default("open")
+  authorId      Int?
+  author        User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  featuredId    Int?
+  featured      Media?     @relation("FeaturedImage", fields: [featuredId], references: [id], onDelete: SetNull)
+  publishedAt   DateTime   @default(now())
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  terms         PostTerm[]
+  comments      Comment[]
+
+  @@unique([type, slug])
+  @@index([status, type, publishedAt])
+}
+
+model Term {
+  id          Int        @id @default(autoincrement())
+  taxonomy    String // category | post_tag
+  name        String
+  slug        String
+  description String     @default("")
+  parentId    Int?
+  posts       PostTerm[]
+
+  @@unique([taxonomy, slug])
+}
+
+model PostTerm {
+  postId Int
+  termId Int
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  term   Term @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@id([postId, termId])
+}
+
+model Media {
+  id        Int      @id @default(autoincrement())
+  path      String   @unique // relatif terhadap folder uploads, contoh: 2026/10/foto.jpg
+  mime      String
+  width     Int?
+  height    Int?
+  fileSize  Int      @default(0)
+  title     String   @default("")
+  alt       String   @default("")
+  caption   String   @default("")
+  sizes     String   @default("{}") // JSON: { medium: "2026/10/foto-300x200.jpg", ... }
+  authorId  Int?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  featuredIn Post[]  @relation("FeaturedImage")
+}
+
+model Comment {
+  id          Int       @id @default(autoincrement())
+  postId      Int
+  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parentId    Int?
+  authorName  String
+  authorEmail String
+  authorUrl   String    @default("")
+  authorIp    String    @default("")
+  content     String
+  status      String    @default("pending") // approved | pending | spam | trash
+  createdAt   DateTime  @default(now())
+}
+
+model Subscriber {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Option {
+  key   String @id
+  value String
+}
+
+model Redirect {
+  id        Int      @id @default(autoincrement())
+  from      String   @unique
+  to        String
+  createdAt DateTime @default(now())
+}
